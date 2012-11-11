@@ -3,22 +3,21 @@
 # Copyright © 2012 Roland Sieker, ospalh@gmail.com
 # Inspiration and source of the URL: Tymon Warecki
 #
-# License: AGNU GPL, version 3 or later; http://www.gnu.org/copyleft/agpl.html
+# License: GNU AGPL, version 3 or later; http://www.gnu.org/copyleft/agpl.html
 
 
 '''
 Download pronunciations from GoogleTTS
 '''
 
-import tempfile
+import os
 import urllib
 import urllib2
-import os
 
 
-from process_audio import process_audio, unmunge_to_mediafile
-from blacklist import get_hash
-from language import default_audio_language_code
+from .blacklist import get_hash
+from .exists import free_media_name
+from .language import default_audio_language_code
 
 download_file_extension = u'.mp3'
 
@@ -26,13 +25,10 @@ url_gtts = 'http://translate.google.com/translate_tts?'
 
 user_agent_string = 'Mozilla/5.0'
 
-# Code
-
 
 def get_word_from_google(source, language=None):
     if not source:
         raise ValueError('Nothing to download')
-    # base_name = free_media_name(source, download_file_extension)
     get_url = build_query_url(source, language)
     # This may throw an exception
     request = urllib2.Request(get_url)
@@ -40,24 +36,17 @@ def get_word_from_google(source, language=None):
     response = urllib2.urlopen(request)
     if 200 != response.code:
         raise ValueError(str(response.code) + ': ' + response.msg)
-    temp_file = tempfile.NamedTemporaryFile(delete=False,
-                                            suffix=download_file_extension)
-    temp_file.write(response.read())
-    temp_file.close()
-    try:
-        file_hash = get_hash(temp_file.name)
-    except ValueError:
-        os.remove(temp_file.name)
-        # Simpler to just raise again
-        raise
     extras = dict(source='GoogleTTS')
+    audio_file_name = free_media_name(source, download_file_extension)
+    audio_file = open(audio_file_name, 'wb')
+    audio_file.write(response.read())
+    audio_file.close()
     try:
-        return process_audio(temp_file.name, source, download_file_extension),\
-            file_hash, extras
-    except:
-        return unmunge_to_mediafile(temp_file.name, source,
-                                    download_file_extension),\
-            file_hash, extras
+        file_hash = get_hash(audio_file.name)
+    except ValueError:
+        os.remove(audio_file_name)
+        raise
+    return audio_file_name, file_hash, extras
 
 
 def build_query_url(source, language=None):

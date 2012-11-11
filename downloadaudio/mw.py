@@ -10,15 +10,14 @@
 Download pronunciations from Merriam-Webster.
 '''
 
-import tempfile
-import urllib
-import urllib2
 import os
 import re
+import urllib
+import urllib2
 
 from BeautifulSoup import BeautifulSoup as soup
 
-from .process_audio import process_audio, unmunge_to_mediafile
+from .exists import free_media_name
 from .blacklist import get_hash
 from .uniqify import uniqify_list
 
@@ -58,7 +57,7 @@ def get_words_from_mw(source):
     word_soup = soup(word_response)
     # The audio clips are stored as input tags with class au
     word_input_aus = word_soup.findAll(name='input', attrs={'class': 'au'})
-    # The interesting bit it the onclick attribute and looks like
+    # The interesting bit is the onclick attribute and looks like
     # "return au('moore01v', 'Moore\'s law')" Isolate those. Make it
     # readable. We do the whole processing EAFP style. When MW changes
     # the format, the processing will raise an exception that we will
@@ -132,24 +131,19 @@ def get_word_hash_pair(base_name, source):
     audio_response = urllib2.urlopen(audio_request)
     if 200 != audio_response.code:
         raise ValueError(str(audio_response.code) + ': ' + audio_response.msg)
-    temp_file = tempfile.NamedTemporaryFile(
-        delete=False, suffix=download_file_extension)
-    temp_file.write(audio_response.read())
-    temp_file.close()
+    # Remove the whole audio processing bit. That is alpha software. I
+    # would recommend not installing pysox and pydub rather than not
+    # recommending installing them at the moment. (2012-11-11)
+    audio_file_name = free_media_name(source, download_file_extension)
+    audio_file = open(audio_file_name, 'wb')
+    audio_file.write(audio_response.read())
+    audio_file.close()
     try:
-        file_hash = get_hash(temp_file.name)
+        file_hash = get_hash(audio_file.name)
     except ValueError:
-        os.remove(temp_file.name)
+        os.remove(audio_file_name)
         raise
-    try:
-        return process_audio(temp_file.name, source, download_file_extension,
-                             silence_percent=0.2, silence_end_percent=0.5),\
-               file_hash
-    except:
-        return unmunge_to_mediafile(temp_file.name, source,
-                                    download_file_extension),\
-               file_hash
-
+    return audio_file_name, file_hash
 
 def get_popup_url(base_name, source):
     """Build url for the MW play audio pop-up."""

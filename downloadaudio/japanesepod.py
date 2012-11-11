@@ -11,20 +11,18 @@ Download Japanese pronunciations from Japanesepod
 '''
 
 
-import tempfile
+import os
 import urllib
 import urllib2
-import os
 
-from process_audio import process_audio, unmunge_to_mediafile
-from blacklist import get_hash
+
+from .blacklist import get_hash
+from .exists import free_media_name
 
 download_file_extension = u'.mp3'
 
 url_jdict = \
     'http://assets.languagepod101.com/dictionary/japanese/audiomp3.php?'
-
-# Code
 
 
 def get_word_from_jpod(kanji, kana):
@@ -35,31 +33,20 @@ def get_word_from_jpod(kanji, kana):
     get_url = build_query_url(kanji, kana)
     # This may throw an exception
     request = urllib2.Request(get_url)
-    # request.add_header('User-agent', 'PyMOTW
-    # (http://www.doughellmann.com/PyMOTW/)')
     response = urllib2.urlopen(request)
     if 200 != response.code:
         raise ValueError(str(response.code) + ': ' + response.msg)
-    temp_file = tempfile.NamedTemporaryFile(delete=False,
-                                            suffix=download_file_extension)
-    temp_file.write(response.read())
-    temp_file.close()
-    try:
-        file_hash = get_hash(temp_file.name)
-    except ValueError:
-        os.remove(temp_file.name)
-        # Simpler to just raise again
-        raise
     extras = dict(source='Japanesepod')
+    audio_file_name = free_media_name(base_name, download_file_extension)
+    audio_file = open(audio_file_name, 'wb')
+    audio_file.write(response.read())
+    audio_file.close()
     try:
-        return process_audio(temp_file.name, base_name,
-                             download_file_extension),\
-            file_hash, extras
-    except:
-        # Most likely case when we get here: no pysox
-        return unmunge_to_mediafile(temp_file.name, base_name,
-                                    download_file_extension),\
-            file_hash, extras
+        file_hash = get_hash(audio_file.name)
+    except ValueError:
+        os.remove(audio_file_name)
+        raise
+    return audio_file_name, file_hash, extras
 
 
 def build_query_url(kanji, kana):
