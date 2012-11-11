@@ -19,7 +19,6 @@ from BeautifulSoup import BeautifulSoup as soup
 
 from .exists import free_media_name
 from .blacklist import get_hash
-from .uniqify import uniqify_list
 
 download_file_extension = u'.wav'
 
@@ -62,7 +61,8 @@ def get_words_from_mw(source):
     # readable. We do the whole processing EAFP style. When MW changes
     # the format, the processing will raise an exception that we will
     # catch in download.py.
-    file_word_list = []
+    file_list = []
+    meaning_no_list = []
     for input_tag in word_input_aus:
         onclick_string = input_tag['onclick']
         # Now cut off the bits on the left and right that should be
@@ -84,16 +84,28 @@ def get_words_from_mw(source):
             meaning_no = match.group(1)
         except AttributeError:
             meaning_no = None
-        file_word_list.append((mw_audio_fn_base, mw_audio_word, meaning_no))
-    #  The same file may appear more than once.
-    file_word_list = uniqify_list(file_word_list)
-    # Now eliminate words that are not what we asked for. For example
-    # if you ask mw for rower, you get the "row" page, which has
-    # pronunciations for "row", "rower" and the other "row".
-    file_word_list = [fw_pair for fw_pair in file_word_list
-                      if fw_pair[1] == source]
+        #  The same file may appear more than once, but with different
+        #  meaning_nos.
+        try:
+            other_index = file_list.index(mw_audio_fn_base)
+        except ValueError:
+            # This is the normal case: First time we see this file.
+            # But only add this if it is actually what we have been
+            # looking for. For example if you ask mw for rower, you
+            # get the "row" page, which has pronunciations for "row",
+            # "rower" and the other "row".
+            if mw_audio_word == source:
+                file_list.append(mw_audio_fn_base)
+                meaning_no_list.append(meaning_no)
+        else:
+            # We already have this word, at index other_index in the
+            # three lists. That meaning_no is None or a string. The
+            # same for this meaning_no.
+            meaning_no_list[other_index] = join_strings(
+                meaning_no_list[other_index], meaning_no)
     words_tuple_list = []
-    for mw_fn, mw_src, meaning_no in file_word_list:
+    for idx, mw_fn in enumerate(file_list):
+        meaning_no = meaning_no_list[idx]
         extras = dict(source='Merriam-Webster')
         if meaning_no:
             extras['Meaning #'] = meaning_no
@@ -135,11 +147,10 @@ def get_word_hash_pair(base_name, source):
     # would recommend not installing pysox and pydub rather than not
     # recommending installing them at the moment. (2012-11-11)
     audio_file_name = free_media_name(source, download_file_extension)
-    audio_file = open(audio_file_name, 'wb')
-    audio_file.write(audio_response.read())
-    audio_file.close()
+    with open(audio_file_name, 'wb') as audio_file:
+        audio_file.write(audio_response.read())
     try:
-        file_hash = get_hash(audio_file.name)
+        file_hash = get_hash(audio_file_name)
     except ValueError:
         os.remove(audio_file_name)
         raise
@@ -149,3 +160,16 @@ def get_popup_url(base_name, source):
     """Build url for the MW play audio pop-up."""
     qdict = dict(file=base_name, word=source)
     return url_mw_popup + urllib.urlencode(qdict)
+
+
+def join_strings(a, b):
+    """
+    Return joined string or None.
+
+    From two inputs which are both either a string or None, build a
+    return string if possible.
+    """
+    l = [a, b]
+    l = [i for i in l if i]
+    if l:
+        return ", ".join(l)

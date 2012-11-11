@@ -38,11 +38,10 @@ def get_word_from_google(source, language=None):
         raise ValueError(str(response.code) + ': ' + response.msg)
     extras = dict(source='GoogleTTS')
     audio_file_name = free_media_name(source, download_file_extension)
-    audio_file = open(audio_file_name, 'wb')
-    audio_file.write(response.read())
-    audio_file.close()
+    with open(audio_file_name, 'wb') as audio_file:
+        audio_file.write(response.read())
     try:
-        file_hash = get_hash(audio_file.name)
+        file_hash = get_hash(audio_file_name)
     except ValueError:
         os.remove(audio_file_name)
         raise
